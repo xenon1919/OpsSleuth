@@ -1,13 +1,9 @@
-import json
-import sys
+"""Convenience wrapper for running ingestion without `pip install -e`.
 
-from opssleuth.ingestion.pipeline import ingest_all
+Once the package is installed, prefer the `opssleuth-ingest` console script.
+"""
 
-
-def main() -> None:
-    stats = ingest_all()
-    print(json.dumps(stats, indent=2))
-
+from opssleuth.cli.ingest import main
 
 if __name__ == "__main__":
-    sys.exit(main())
+    main()

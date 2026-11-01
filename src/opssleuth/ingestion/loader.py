@@ -1,7 +1,7 @@
 import json
 from pathlib import Path
 
-from opssleuth.models import Document, EvalQuestion, TelemetryEvent
+from opssleuth.domain.models import Document, EvalQuestion, TelemetryEvent
 
 
 def _read_jsonl(path: Path) -> list[dict]:

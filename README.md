@@ -16,23 +16,44 @@ RAG-chatbot-over-docs.
 
 ## Project layout
 
+Organized by architectural layer, not by milestone, so each layer can grow
+independently as the corrective-RAG loop, API, and eval harness are added:
+
 ```
 src/opssleuth/
-  config.py           settings (env-driven)
-  models.py            Document, TelemetryEvent, EvalQuestion, Chunk
-  ingestion/
-    loader.py          parse the starter dataset's jsonl files
-    chunking.py         word-window chunking + telemetry-to-text
-    embed.py            Vertex AI embeddings wrapper
-    vector_store.py     Chroma wrapper
-    bm25_index.py        BM25 index build/save/load
-    pipeline.py          ingest_all(): load -> chunk -> embed -> store
+  core/                 cross-cutting concerns
+    config.py            settings (env-driven, pydantic-settings)
+    logging.py           stdlib logging setup
+  domain/                shared types
+    models.py             Document, TelemetryEvent, EvalQuestion, Chunk
+  ingestion/             ETL: raw dataset -> Chunk objects
+    loader.py             parse the starter dataset's jsonl files
+    chunking.py           word-window chunking + telemetry-to-text
+    pipeline.py            ingest_all(): load -> chunk -> embed -> store
+  retrieval/             storage + search over Chunks
+    embeddings.py          Vertex AI embeddings wrapper
+    vector_store.py        Chroma wrapper
+    bm25_index.py            BM25 index build/save/load
+    (hybrid.py, reranker.py added in milestones 2-3)
   llm/
-    gemini.py            Vertex AI Gemini generation wrapper
+    gemini.py              Vertex AI Gemini generation wrapper
+  graph/                 LangGraph corrective-retrieval orchestration (milestone 5+)
+  eval/                  Basic vs Advanced vs Corrective RAG eval harness (milestone 7+)
+  api/                   FastAPI service (milestone 8+)
+  cli/
+    ingest.py             `opssleuth-ingest` console script
+
+data/
+  starter_dataset/       synthetic documents, telemetry, eval questions (committed)
+  chroma/                generated Chroma persistence dir (gitignored)
+  artifacts/             generated BM25 index etc. (gitignored)
+
 scripts/
-  ingest.py              CLI: run the full ingestion pipeline
-tests/                   unit tests (no GCP calls required)
-opssleuth_starter_dataset/   synthetic documents, telemetry, eval questions
+  ingest.py              thin wrapper around opssleuth.cli.ingest for non-installed use
+
+tests/
+  unit/                  no GCP calls required
+  (integration/ added once there are tests that need real GCP credentials)
 ```
 
 ## Setup
@@ -50,16 +71,18 @@ Run tests (no GCP credentials needed):
 .venv\Scripts\python -m pytest tests/ -v
 ```
 
-Run ingestion (requires GCP credentials + a project with Vertex AI enabled):
+Run ingestion (requires GCP credentials + a project with Vertex AI enabled —
+this makes real, billed Vertex AI embedding calls):
 
 ```powershell
 .venv\Scripts\python scripts\ingest.py
+# or, once installed: opssleuth-ingest
 ```
 
 This chunks `documents.jsonl`, converts `telemetry_events.jsonl` into
 retrievable text records, embeds everything with the configured Vertex AI
-embedding model, upserts into a local Chroma collection, and builds a BM25
-index saved to `artifacts/bm25_index.pkl`.
+embedding model, upserts into a local Chroma collection (`data/chroma/`), and
+builds a BM25 index saved to `data/artifacts/bm25_index.pkl`.
 
 ## Build order (from the project plan)
 
@@ -79,6 +102,6 @@ corrective loop.
 
 ## Dataset
 
-`opssleuth_starter_dataset/` is synthetic (fictional services, incidents,
+`data/starter_dataset/` is synthetic (fictional services, incidents,
 telemetry) and designed to contain conflicting/stale documentation and
 questions with insufficient evidence — see its own `README.md` for details.

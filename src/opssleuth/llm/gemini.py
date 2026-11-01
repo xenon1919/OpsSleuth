@@ -1,7 +1,7 @@
 import vertexai
 from vertexai.generative_models import GenerationConfig, GenerativeModel
 
-from opssleuth.config import settings
+from opssleuth.core.config import settings
 
 _initialized = False
 _models: dict[str, GenerativeModel] = {}

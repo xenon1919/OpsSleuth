@@ -1,6 +1,6 @@
 from opssleuth.ingestion.loader import load_documents, load_eval_questions, load_telemetry_events
 
-DATA_DIR = "opssleuth_starter_dataset"
+DATA_DIR = "data/starter_dataset"
 
 
 def test_load_documents():

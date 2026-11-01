@@ -1,4 +1,4 @@
-from opssleuth.models import Chunk, Document, TelemetryEvent
+from opssleuth.domain.models import Chunk, Document, TelemetryEvent
 
 
 def chunk_document(doc: Document, chunk_size_words: int, overlap_words: int) -> list[Chunk]:

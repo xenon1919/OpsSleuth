@@ -1,5 +1,5 @@
-from opssleuth.ingestion.bm25_index import BM25Index
-from opssleuth.models import Chunk
+from opssleuth.domain.models import Chunk
+from opssleuth.retrieval.bm25_index import BM25Index
 
 
 def make_chunk(chunk_id: str, text: str) -> Chunk:

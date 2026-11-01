@@ -1,7 +1,7 @@
 import chromadb
 
-from opssleuth.config import settings
-from opssleuth.models import Chunk
+from opssleuth.core.config import settings
+from opssleuth.domain.models import Chunk
 
 
 class VectorStore:

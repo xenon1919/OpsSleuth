@@ -1,5 +1,5 @@
+from opssleuth.domain.models import Document, TelemetryEvent
 from opssleuth.ingestion.chunking import chunk_document, telemetry_to_chunk
-from opssleuth.models import Document, TelemetryEvent
 
 
 def make_doc(word_count: int) -> Document:

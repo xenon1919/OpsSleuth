@@ -1,7 +1,7 @@
 import vertexai
 from vertexai.language_models import TextEmbeddingInput, TextEmbeddingModel
 
-from opssleuth.config import settings
+from opssleuth.core.config import settings
 
 _model: TextEmbeddingModel | None = None
 _initialized = False

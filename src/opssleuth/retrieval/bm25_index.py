@@ -4,7 +4,7 @@ from pathlib import Path
 
 from rank_bm25 import BM25Okapi
 
-from opssleuth.models import Chunk
+from opssleuth.domain.models import Chunk
 
 _TOKEN_RE = re.compile(r"[a-z0-9]+")
 

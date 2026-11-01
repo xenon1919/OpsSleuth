@@ -1,12 +1,12 @@
 from pathlib import Path
 
-from opssleuth.config import settings
-from opssleuth.ingestion.bm25_index import BM25Index
+from opssleuth.core.config import settings
+from opssleuth.domain.models import Chunk
 from opssleuth.ingestion.chunking import chunk_document, telemetry_to_chunk
-from opssleuth.ingestion.embed import embed_texts
 from opssleuth.ingestion.loader import load_documents, load_telemetry_events
-from opssleuth.ingestion.vector_store import VectorStore
-from opssleuth.models import Chunk
+from opssleuth.retrieval.bm25_index import BM25Index
+from opssleuth.retrieval.embeddings import embed_texts
+from opssleuth.retrieval.vector_store import VectorStore
 
 
 def build_chunks(data_dir: str | Path) -> list[Chunk]:

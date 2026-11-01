@@ -9,10 +9,10 @@ class Settings(BaseSettings):
     gemini_model: str = "gemini-2.0-flash"
     embedding_model: str = "text-embedding-005"
 
-    data_dir: str = "opssleuth_starter_dataset"
-    chroma_persist_dir: str = "chroma_data"
+    data_dir: str = "data/starter_dataset"
+    chroma_persist_dir: str = "data/chroma"
     chroma_collection: str = "opssleuth_docs"
-    artifacts_dir: str = "artifacts"
+    artifacts_dir: str = "data/artifacts"
 
     chunk_size_words: int = 450
     chunk_overlap_words: int = 75
