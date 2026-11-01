@@ -17,5 +17,7 @@ class Settings(BaseSettings):
     chunk_size_words: int = 450
     chunk_overlap_words: int = 75
 
+    reranker_model: str = "BAAI/bge-reranker-base"
+
 
 settings = Settings()

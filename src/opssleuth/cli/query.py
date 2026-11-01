@@ -4,6 +4,7 @@ import sys
 from opssleuth.core.config import settings
 from opssleuth.core.logging import get_logger
 from opssleuth.ingestion.loader import load_eval_questions
+from opssleuth.pipelines.advanced import run_advanced_rag
 from opssleuth.pipelines.basic import run_basic_rag
 from opssleuth.pipelines.hybrid import run_hybrid_rag
 
@@ -12,6 +13,7 @@ logger = get_logger(__name__)
 PIPELINES = {
     "basic": run_basic_rag,
     "hybrid": run_hybrid_rag,
+    "advanced": run_advanced_rag,
 }
 
 
