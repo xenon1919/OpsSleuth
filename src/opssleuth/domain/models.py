@@ -59,3 +59,23 @@ class Chunk(BaseModel):
             "version": self.version,
             "status": self.status,
         }
+
+
+class RetrievedChunk(BaseModel):
+    """A chunk returned by a retriever, with its retrieval score."""
+
+    chunk_id: str
+    document_id: str
+    text: str
+    score: float
+    metadata: dict[str, Any] = {}
+
+
+class RagAnswer(BaseModel):
+    """Output of a RAG pipeline run (basic, advanced, or corrective)."""
+
+    question: str
+    answer: str
+    pipeline: str
+    cited_document_ids: list[str]
+    retrieved_chunks: list[RetrievedChunk]

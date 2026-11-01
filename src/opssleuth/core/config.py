@@ -6,7 +6,7 @@ class Settings(BaseSettings):
 
     google_cloud_project: str = ""
     google_cloud_location: str = "us-central1"
-    gemini_model: str = "gemini-2.0-flash"
+    gemini_model: str = "gemini-2.5-flash"
     embedding_model: str = "text-embedding-005"
 
     data_dir: str = "data/starter_dataset"
