@@ -2,6 +2,7 @@ import re
 
 from opssleuth.domain.models import RagAnswer, RetrievedChunk
 from opssleuth.llm.gemini import generate
+from opssleuth.retrieval.formatting import format_context
 
 SYSTEM_PROMPT = """You are OpsSleuth, an incident-investigation assistant for a production \
 engineering team. You answer questions using ONLY the evidence provided to you below \
@@ -18,19 +19,6 @@ evidence is missing. Do not guess or invent an answer.
 # Matches DOC-xxx / EVT-xxx ids anywhere, including multi-id brackets like
 # "[DOC-007, DOC-024, EVT-1004]" which a single-id-per-bracket pattern would miss.
 CITATION_RE = re.compile(r"(?:DOC|EVT)-[A-Za-z0-9]+")
-
-
-def format_context(chunks: list[RetrievedChunk]) -> str:
-    blocks = []
-    for chunk in chunks:
-        meta = chunk.metadata
-        header = (
-            f"[{chunk.document_id}] title={meta.get('title', '')} "
-            f"status={meta.get('status', '')} last_updated={meta.get('last_updated', '')} "
-            f"version={meta.get('version', '')}"
-        )
-        blocks.append(f"{header}\n{chunk.text}")
-    return "\n\n".join(blocks)
 
 
 def build_prompt(question: str, chunks: list[RetrievedChunk]) -> str:

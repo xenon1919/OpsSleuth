@@ -1,3 +1,6 @@
+import json
+from typing import Any
+
 import vertexai
 from vertexai.generative_models import GenerationConfig, GenerativeModel
 
@@ -37,3 +40,25 @@ def generate(
         generation_config=GenerationConfig(temperature=temperature),
     )
     return response.text
+
+
+def generate_json(
+    prompt: str,
+    response_schema: dict[str, Any],
+    system: str | None = None,
+    temperature: float = 0.0,
+    model_name: str | None = None,
+) -> dict[str, Any]:
+    """Like generate(), but constrains output to the given JSON schema and parses it.
+    Used for structured steps (grading, query rewriting) where free text would need
+    fragile regex parsing."""
+    model = _get_model(model_name or settings.gemini_model, system)
+    response = model.generate_content(
+        prompt,
+        generation_config=GenerationConfig(
+            temperature=temperature,
+            response_mime_type="application/json",
+            response_schema=response_schema,
+        ),
+    )
+    return json.loads(response.text)

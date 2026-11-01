@@ -79,3 +79,26 @@ class RagAnswer(BaseModel):
     pipeline: str
     cited_document_ids: list[str]
     retrieved_chunks: list[RetrievedChunk]
+
+
+class ChunkGrade(BaseModel):
+    """LLM-as-judge verdict on whether one retrieved chunk actually helps answer
+    the question, per the CRAG-style per-document relevance grading step."""
+
+    chunk_id: str
+    verdict: Literal["relevant", "irrelevant"]
+    reason: str
+
+
+class RetrievalGrade(BaseModel):
+    """Aggregate grading result for a retrieved set: which chunks are relevant, and
+    whether the relevant subset is sufficient to answer the question at all. This is
+    the signal the corrective-retrieval loop (milestone 5) acts on."""
+
+    chunk_grades: list[ChunkGrade]
+    sufficiency: Literal["sufficient", "insufficient"]
+    missing_evidence: str = ""
+
+    @property
+    def relevant_chunk_ids(self) -> list[str]:
+        return [g.chunk_id for g in self.chunk_grades if g.verdict == "relevant"]
