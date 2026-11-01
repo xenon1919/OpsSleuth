@@ -52,5 +52,18 @@ class VectorStore:
             )
         return hits
 
+    def get_by_ids(self, chunk_ids: list[str]) -> dict[str, dict]:
+        """Fetch text/metadata for known chunk ids, e.g. to backfill metadata for
+        hits that came from a retriever (like BM25) that doesn't store it."""
+        if not chunk_ids:
+            return {}
+        result = self.collection.get(ids=chunk_ids, include=["documents", "metadatas"])
+        return {
+            chunk_id: {"text": text, "metadata": metadata}
+            for chunk_id, text, metadata in zip(
+                result["ids"], result["documents"], result["metadatas"]
+            )
+        }
+
     def count(self) -> int:
         return self.collection.count()
