@@ -5,8 +5,10 @@ from opssleuth.core.config import settings
 from opssleuth.core.logging import get_logger
 from opssleuth.grading.retrieval_grader import grade_retrieval
 from opssleuth.ingestion.loader import load_eval_questions
+from opssleuth.domain.models import CorrectiveRagAnswer
 from opssleuth.pipelines.advanced import run_advanced_rag
 from opssleuth.pipelines.basic import run_basic_rag
+from opssleuth.pipelines.corrective import run_corrective_rag
 from opssleuth.pipelines.hybrid import run_hybrid_rag
 
 logger = get_logger(__name__)
@@ -15,6 +17,7 @@ PIPELINES = {
     "basic": run_basic_rag,
     "hybrid": run_hybrid_rag,
     "advanced": run_advanced_rag,
+    "corrective": run_corrective_rag,
 }
 
 
@@ -24,7 +27,13 @@ def _print_answer(question: str, result, grade: bool) -> None:
     print(f"-- cited: {result.cited_document_ids}")
     print(f"-- retrieved: {[c.chunk_id for c in result.retrieved_chunks]}")
 
-    if grade:
+    if isinstance(result, CorrectiveRagAnswer):
+        print(f"-- final sufficiency: {result.final_sufficiency}")
+        for a in result.attempts:
+            print(f"   attempt {a.attempt} query={a.query!r} -> {a.sufficiency}")
+            if a.missing_evidence:
+                print(f"      missing: {a.missing_evidence}")
+    elif grade:
         retrieval_grade = grade_retrieval(question, result.retrieved_chunks)
         print(f"-- grading: sufficiency={retrieval_grade.sufficiency}")
         for g in retrieval_grade.chunk_grades:

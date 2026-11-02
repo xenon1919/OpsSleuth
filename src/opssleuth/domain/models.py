@@ -102,3 +102,27 @@ class RetrievalGrade(BaseModel):
     @property
     def relevant_chunk_ids(self) -> list[str]:
         return [g.chunk_id for g in self.chunk_grades if g.verdict == "relevant"]
+
+
+class QueryRewrite(BaseModel):
+    """A corrective-retrieval query rewrite, with the reasoning that produced it."""
+
+    rewritten_query: str
+    rationale: str
+
+
+class RewriteAttempt(BaseModel):
+    """One iteration of the corrective loop, kept for transparency/debugging."""
+
+    attempt: int
+    query: str
+    sufficiency: Literal["sufficient", "insufficient"]
+    missing_evidence: str = ""
+
+
+class CorrectiveRagAnswer(RagAnswer):
+    """RagAnswer plus the corrective loop's own trail: how many retrieval attempts it
+    took, whether it ultimately found sufficient evidence, and what each attempt did."""
+
+    attempts: list[RewriteAttempt]
+    final_sufficiency: Literal["sufficient", "insufficient"]

@@ -30,14 +30,19 @@ def build_prompt(question: str, chunks: list[RetrievedChunk]) -> str:
     )
 
 
-def build_rag_answer(question: str, chunks: list[RetrievedChunk], pipeline: str) -> RagAnswer:
-    """Generate a grounded answer for already-retrieved chunks and package it as a
-    RagAnswer. Shared by every pipeline variant (basic, hybrid, corrective, ...) so they
-    only differ in how they retrieve, not how they prompt or parse citations."""
+def generate_grounded_answer(question: str, chunks: list[RetrievedChunk]) -> tuple[str, list[str]]:
+    """Generate an answer grounded in the given chunks, and the DOC-/EVT- ids it cited.
+    Shared by every pipeline variant so they only differ in how they retrieve, not how
+    they prompt or parse citations."""
     prompt = build_prompt(question, chunks)
     answer = generate(prompt, system=SYSTEM_PROMPT, temperature=0.0)
     cited_ids = sorted(set(CITATION_RE.findall(answer)))
+    return answer, cited_ids
 
+
+def build_rag_answer(question: str, chunks: list[RetrievedChunk], pipeline: str) -> RagAnswer:
+    """generate_grounded_answer(), packaged as a RagAnswer."""
+    answer, cited_ids = generate_grounded_answer(question, chunks)
     return RagAnswer(
         question=question,
         answer=answer,
