@@ -3,9 +3,10 @@ import sys
 
 from opssleuth.core.config import settings
 from opssleuth.core.logging import get_logger
+from opssleuth.domain.models import CorrectiveRagAnswer
+from opssleuth.grading.faithfulness_grader import verify_faithfulness
 from opssleuth.grading.retrieval_grader import grade_retrieval
 from opssleuth.ingestion.loader import load_eval_questions
-from opssleuth.domain.models import CorrectiveRagAnswer
 from opssleuth.pipelines.advanced import run_advanced_rag
 from opssleuth.pipelines.basic import run_basic_rag
 from opssleuth.pipelines.corrective import run_corrective_rag
@@ -21,7 +22,7 @@ PIPELINES = {
 }
 
 
-def _print_answer(question: str, result, grade: bool) -> None:
+def _print_answer(question: str, result, grade: bool, verify: bool) -> None:
     print(f"\n=== {question} ===")
     print(result.answer)
     print(f"-- cited: {result.cited_document_ids}")
@@ -40,6 +41,14 @@ def _print_answer(question: str, result, grade: bool) -> None:
             print(f"   [{g.verdict}] {g.chunk_id}: {g.reason}")
         if retrieval_grade.missing_evidence:
             print(f"-- missing evidence: {retrieval_grade.missing_evidence}")
+
+    if verify:
+        report = verify_faithfulness(result.answer, result.retrieved_chunks)
+        print(f"-- faithfulness: {'faithful' if report.is_faithful else 'UNFAITHFUL'}")
+        for c in report.claims:
+            print(f"   [{c.verdict}] {c.claim}")
+            if c.verdict == "unsupported":
+                print(f"      reason: {c.reason}")
 
 
 def main() -> None:
@@ -64,13 +73,18 @@ def main() -> None:
         action="store_true",
         help="Also run LLM-as-judge retrieval-quality grading on the retrieved chunks.",
     )
+    parser.add_argument(
+        "--verify",
+        action="store_true",
+        help="Also run LLM-as-judge claim verification (hallucination detection) on the answer.",
+    )
     args = parser.parse_args()
 
     run_pipeline = PIPELINES[args.pipeline]
 
     if args.question:
         result = run_pipeline(args.question, top_k=args.top_k)
-        _print_answer(args.question, result, args.grade)
+        _print_answer(args.question, result, args.grade, args.verify)
         return
 
     eval_ids = args.eval_ids or ["Q-001", "Q-002"]
@@ -78,7 +92,7 @@ def main() -> None:
     for qid in eval_ids:
         eval_question = questions[qid]
         result = run_pipeline(eval_question.question, top_k=args.top_k)
-        _print_answer(f"{qid}: {eval_question.question}", result, args.grade)
+        _print_answer(f"{qid}: {eval_question.question}", result, args.grade, args.verify)
         print(f"-- reference: {eval_question.reference_answer}")
         print(f"-- expected relevant docs: {eval_question.relevant_document_ids}")
 

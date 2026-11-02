@@ -126,3 +126,28 @@ class CorrectiveRagAnswer(RagAnswer):
 
     attempts: list[RewriteAttempt]
     final_sufficiency: Literal["sufficient", "insufficient"]
+
+
+class ClaimVerdict(BaseModel):
+    """Whether one atomic factual claim from a generated answer is actually backed by
+    the retrieved evidence, independent of what the generator itself cited."""
+
+    claim: str
+    verdict: Literal["supported", "unsupported"]
+    supporting_chunk_ids: list[str] = []
+    reason: str
+
+
+class FaithfulnessReport(BaseModel):
+    """Hallucination-detection result: did the generator's claims actually come from
+    the evidence it was given, rather than outside knowledge or confabulation?"""
+
+    claims: list[ClaimVerdict]
+
+    @property
+    def is_faithful(self) -> bool:
+        return all(c.verdict == "supported" for c in self.claims)
+
+    @property
+    def unsupported_claims(self) -> list[ClaimVerdict]:
+        return [c for c in self.claims if c.verdict == "unsupported"]
