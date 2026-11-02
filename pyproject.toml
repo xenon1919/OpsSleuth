@@ -27,6 +27,7 @@ dev = [
 [project.scripts]
 opssleuth-ingest = "opssleuth.cli.ingest:main"
 opssleuth-query = "opssleuth.cli.query:main"
+opssleuth-evaluate = "opssleuth.cli.evaluate:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
