@@ -22,12 +22,14 @@ dependencies = [
 [project.optional-dependencies]
 dev = [
     "pytest>=8.0",
+    "httpx>=0.27",
 ]
 
 [project.scripts]
 opssleuth-ingest = "opssleuth.cli.ingest:main"
 opssleuth-query = "opssleuth.cli.query:main"
 opssleuth-evaluate = "opssleuth.cli.evaluate:main"
+opssleuth-serve = "opssleuth.cli.serve:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]

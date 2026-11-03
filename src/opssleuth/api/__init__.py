@@ -1,1 +1,1 @@
-"""FastAPI service (milestone 8+). Empty for now."""
+"""FastAPI service exposing the RAG pipelines over HTTP."""
