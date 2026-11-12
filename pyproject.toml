@@ -15,8 +15,6 @@ dependencies = [
     "fastapi>=0.110",
     "uvicorn[standard]>=0.29",
     "langgraph>=0.2",
-    "ragas>=0.2",
-    "deepeval>=1.0",
 ]
 
 [project.optional-dependencies]
@@ -33,3 +31,9 @@ opssleuth-serve = "opssleuth.cli.serve:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+[tool.pytest.ini_options]
+markers = [
+    "integration: hits real GCP (Vertex AI) APIs; skipped by default, run with `-m integration`.",
+]
+addopts = "-m 'not integration'"

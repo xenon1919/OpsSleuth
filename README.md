@@ -1,59 +1,145 @@
 # OpsSleuth — Agentic Incident Investigation Engine
 
-An autonomous system that investigates production incidents using Corrective RAG:
-hybrid retrieval (BM25 + dense), reranking, retrieval-quality grading, query
-rewriting, and evidence-backed root-cause reports — instead of a plain
-RAG-chatbot-over-docs.
+OpsSleuth investigates production incidents the way an on-call engineer would:
+it retrieves evidence, grades whether that evidence is actually good enough,
+and — if it isn't — rewrites its own search query and tries again, instead of
+confidently answering from whatever it happened to find first.
+
+> Why did `payment-api` start returning 503s after the latest deployment?
+
+A plain RAG chatbot embeds that question, grabs the top-k nearest documents,
+and generates an answer — even if the retrieved evidence is about a different
+incident, is outdated, or doesn't actually contain the answer. OpsSleuth is
+built to catch and correct exactly those failure modes, and to **measure**
+whether each added technique actually helps rather than just assuming it does.
+
+## The centerpiece: measured, not assumed
+
+The project implements four pipeline variants of increasing sophistication
+and evaluates all of them against the same 25 held-out questions — including
+ones with conflicting documentation, multi-hop reasoning, and questions that
+have no answer in the corpus at all (`opssleuth-evaluate`):
+
+| pipeline | recall@k | mrr | ndcg@k | ctx precision | faithfulness | avg latency |
+| --- | --- | --- | --- | --- | --- | --- |
+| **basic** — dense vector retrieval only | **0.769** | 0.901 | **0.756** | 0.344 | **1.000** | 4.6s |
+| **advanced** — hybrid (BM25+dense) + reranking | 0.751 | 0.907 | 0.721 | **0.352** | 0.960 | 6.5s |
+| **corrective** — advanced + grading + query-rewrite retry loop | 0.751 | 0.907 | 0.721 | **0.352** | 0.960 | 14.5s |
+
+**The honest finding:** hybrid retrieval + reranking did *not* uniformly win.
+Basic dense-only retrieval actually edged out the fancier pipelines on
+recall@k and ndcg@k in this run. Tracing it down: on a "stale document"
+question (is the old deployment guide still valid?), the reranker dropped
+*both* gold documents that dense-only retrieval had kept in its top 5,
+causing advanced/corrective to wrongly answer "insufficient evidence" where
+basic correctly identified the superseded doc. Advanced/corrective did win on
+context precision (less retrieved noise) and reached the right answer on
+every multi-hop question, but introduced one unsupported claim basic didn't
+have, and cost 3x the latency.
+
+The corrective loop itself worked as designed: of the two questions in the
+set with literally no answer in the corpus (e.g. "what's the production JWT
+signing key?"), it correctly triggered a query rewrite, retried with a
+sharper query, and after exhausting its retry budget still **abstained**
+rather than inventing a secret — a 0% "correction success rate" there is the
+right outcome, not a bug, since there was never a right answer to find.
+
+Full per-question results: `data/artifacts/eval_results.json` (regenerate
+with `opssleuth-evaluate`).
+
+## How it works
+
+```
+question
+   │
+   ▼
+query embedding ──► dense retrieval ─┐
+                                      ├─► Reciprocal Rank Fusion ─► cross-encoder rerank ─► top-k chunks
+BM25 keyword search ─────────────────┘                                                         │
+                                                                                                 ▼
+                                                                          LLM-as-judge: relevant? sufficient?
+                                                                                 │                  │
+                                                                      insufficient,                 │ sufficient
+                                                                      attempts left                 │
+                                                                                 │                   ▼
+                                                                      rewrite query            generate grounded
+                                                                      (missing-evidence             answer
+                                                                       aware) and retry              │
+                                                                                                       ▼
+                                                                                        LLM-as-judge: is every
+                                                                                        claim actually backed
+                                                                                        by the evidence?
+```
+
+- **Hybrid retrieval**: dense (Vertex AI embeddings + Chroma) and BM25
+  (`rank-bm25`) each retrieve independently; results are merged with
+  Reciprocal Rank Fusion, which rewards chunks both retrievers agree on.
+- **Reranking**: a local cross-encoder (`BAAI/bge-reranker-base`, no API
+  cost) re-scores the candidate set by looking at the question and each
+  chunk *together*, which is slower but far more precise than independent
+  similarity scores.
+- **Retrieval grading**: Gemini grades each retrieved chunk relevant/
+  irrelevant for *this specific question*, then judges whether the relevant
+  subset is actually sufficient to answer confidently — this is the CRAG-style
+  correction signal, done via structured JSON output rather than regex
+  parsing.
+- **Corrective loop** (LangGraph `StateGraph`): retrieve → grade →
+  (insufficient and attempts remain? rewrite the query using what's missing,
+  then retry) → generate. Grading always runs against the *original*
+  question even as the search query evolves, so correction can't drift
+  off-task.
+- **Claim verification**: after generation, a separate LLM-as-judge pass
+  decomposes the answer into atomic claims and checks each one against the
+  evidence independently — catching claims the generator cited a source for
+  but that source doesn't actually support.
 
 ## Stack
 
-- LLM + embeddings: Gemini via Vertex AI (`google-cloud-aiplatform`)
-- Dense vector store: Chroma (local, persistent)
-- Keyword search: BM25 (`rank-bm25`)
-- Orchestration: LangGraph (added in the corrective-retrieval milestone)
-- API: FastAPI (added in the deployment milestone)
-- Eval: Ragas / DeepEval
+| component | choice | why |
+| --- | --- | --- |
+| LLM + embeddings | Gemini via Vertex AI (`google-cloud-aiplatform`) | already had Vertex AI set up |
+| Dense vector store | Chroma (local, persistent) | no infra to stand up |
+| Keyword search | BM25 (`rank-bm25`) | lightweight, no service |
+| Reranker | local `sentence-transformers` CrossEncoder | no extra paid API call |
+| Orchestration | LangGraph | explicit state machine for the retry loop |
+| API | FastAPI + uvicorn | |
+| Eval | custom (see note below) | |
+
+**Note on eval tooling**: the original plan called for Ragas/DeepEval.
+Ragas 0.4.3 (latest at time of writing) unconditionally imports a
+`langchain-community` module at package-import time that no longer exists in
+current `langchain-community` releases; the only fix is downgrading the
+entire `langchain-core` stack, which breaks LangGraph 1.x (a load-bearing
+dependency for the corrective loop). Rather than force a brittle, unmaintained
+dependency chain into the project, the eval metrics (`eval/metrics.py`:
+Recall@K, MRR, NDCG, Context Precision) and the LLM-as-judge grading/
+faithfulness checks are implemented directly — arguably a stronger
+demonstration of understanding *how* these metrics work than calling a
+library that computes them opaquely.
 
 ## Project layout
 
-Organized by architectural layer, not by milestone, so each layer can grow
-independently as the corrective-RAG loop, API, and eval harness are added:
-
 ```
 src/opssleuth/
-  core/                 cross-cutting concerns
-    config.py            settings (env-driven, pydantic-settings)
-    logging.py           stdlib logging setup
-  domain/                shared types
-    models.py             Document, TelemetryEvent, EvalQuestion, Chunk
-  ingestion/             ETL: raw dataset -> Chunk objects
-    loader.py             parse the starter dataset's jsonl files
-    chunking.py           word-window chunking + telemetry-to-text
-    pipeline.py            ingest_all(): load -> chunk -> embed -> store
-  retrieval/             storage + search over Chunks
-    embeddings.py          Vertex AI embeddings wrapper
-    vector_store.py        Chroma wrapper
-    bm25_index.py            BM25 index build/save/load
-    (hybrid.py, reranker.py added in milestones 2-3)
-  llm/
-    gemini.py              Vertex AI Gemini generation wrapper
-  graph/                 LangGraph corrective-retrieval orchestration (milestone 5+)
-  eval/                  Basic vs Advanced vs Corrective RAG eval harness (milestone 7+)
-  api/                   FastAPI service (milestone 8+)
-  cli/
-    ingest.py             `opssleuth-ingest` console script
+  core/                 settings (pydantic-settings) + logging
+  domain/                shared pydantic models (Chunk, RagAnswer, RetrievalGrade, ...)
+  ingestion/             ETL: raw dataset -> Chunk objects (loader, chunking, pipeline)
+  retrieval/             dense, BM25, hybrid (RRF), reranker, query rewriting
+  llm/                   Vertex AI Gemini wrapper (generate + structured generate_json)
+  grading/               LLM-as-judge: retrieval-quality grading, faithfulness/claim verification
+  graph/                 LangGraph corrective-retrieval loop
+  pipelines/             the four end-to-end variants: basic, hybrid, advanced, corrective
+  eval/                  retrieval metrics + the pipeline-comparison harness
+  api/                   FastAPI app + request/response schemas
+  cli/                   console scripts (ingest, query, evaluate, serve)
 
 data/
-  starter_dataset/       synthetic documents, telemetry, eval questions (committed)
-  chroma/                generated Chroma persistence dir (gitignored)
-  artifacts/             generated BM25 index etc. (gitignored)
-
-scripts/
-  ingest.py              thin wrapper around opssleuth.cli.ingest for non-installed use
+  starter_dataset/       synthetic docs, telemetry, eval questions (committed)
+  chroma/, artifacts/    generated at ingest time (gitignored)
 
 tests/
-  unit/                  no GCP calls required
-  (integration/ added once there are tests that need real GCP credentials)
+  unit/                  no network calls - everything mocked (52 tests)
+  integration/           hits live Vertex AI; skipped by default, run with `-m integration`
 ```
 
 ## Setup
@@ -65,43 +151,55 @@ copy .env.example .env   # fill in GOOGLE_CLOUD_PROJECT
 gcloud auth application-default login
 ```
 
-Run tests (no GCP credentials needed):
+For an exact reproduction of the environment this was built/tested in, use
+the pinned lockfile instead: `pip install -r requirements-lock.txt && pip
+install -e . --no-deps`.
+
+Run unit tests (fast, no GCP calls, mocked throughout):
 
 ```powershell
-.venv\Scripts\python -m pytest tests/ -v
+.venv\Scripts\python -m pytest tests/unit -v
 ```
 
-Run ingestion (requires GCP credentials + a project with Vertex AI enabled —
-this makes real, billed Vertex AI embedding calls):
+Run the live integration tests (hits real Vertex AI; requires ingestion to
+have been run first):
 
 ```powershell
-.venv\Scripts\python scripts\ingest.py
-# or, once installed: opssleuth-ingest
+.venv\Scripts\python -m pytest tests/integration -m integration -v
 ```
 
-This chunks `documents.jsonl`, converts `telemetry_events.jsonl` into
-retrievable text records, embeds everything with the configured Vertex AI
-embedding model, upserts into a local Chroma collection (`data/chroma/`), and
-builds a BM25 index saved to `data/artifacts/bm25_index.pkl`.
+Run ingestion (makes real, billed Vertex AI embedding calls):
 
-## Build order (from the project plan)
+```powershell
+opssleuth-ingest
+```
 
-1. Basic RAG pipeline (dense retrieval only) — **next milestone**
-2. Hybrid retrieval (BM25 + dense, fused with Reciprocal Rank Fusion)
-3. Reranking
-4. Retrieval quality grading
-5. Corrective retrieval loop (query rewriting, alternative retrieval)
-6. Evidence / claim verification against retrieved context
-7. RAG evaluation dashboard (Basic vs. Advanced vs. Corrective RAG, on
-   `evaluation_questions.jsonl`)
-8. FastAPI deployment
+Ask a question through any pipeline variant:
 
-First milestone: correctly investigate `Q-001` and `Q-002` in
-`evaluation_questions.jsonl` end to end before moving on to the agentic
-corrective loop.
+```powershell
+opssleuth-query --pipeline corrective --question "Why did payment-api return 503s?"
+opssleuth-query --pipeline advanced --grade --verify --eval-ids Q-001 Q-019
+```
+
+Run the full Basic vs Advanced vs Corrective comparison:
+
+```powershell
+opssleuth-evaluate
+```
+
+Serve the HTTP API (`POST /investigate`, `GET /health`, `GET /pipelines`):
+
+```powershell
+opssleuth-serve --port 8000
+```
 
 ## Dataset
 
 `data/starter_dataset/` is synthetic (fictional services, incidents,
-telemetry) and designed to contain conflicting/stale documentation and
-questions with insufficient evidence — see its own `README.md` for details.
+telemetry) and deliberately contains conflicting/stale documentation and
+questions with no answer in the corpus at all — see its own `README.md` for
+details.
+
+## License
+
+MIT — see `LICENSE`.
